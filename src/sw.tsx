@@ -15,6 +15,13 @@ let routes = route({
   notFound: "*notfound",
 });
 
+// Setup proper TS typings for the service worker - see:
+// https://www.devextent.com/create-service-worker-typescript/
+/// <reference lib="WebWorker" />
+// export empty type because of tsc --isolatedModules flag
+export type {};
+declare const self: ServiceWorkerGlobalScope;
+
 // And some handlers returning Remix Components
 let handlers: RouteHandlers<typeof routes> = {
   index: ({ request }) => renderHtml(request.url, Home),
@@ -49,7 +56,7 @@ self.addEventListener("fetch", async (event) => {
   if (request.url.split("/").slice(-1)[0].includes(".")) {
     return;
   }
-  console.log(`URL requested: ${request.url}`);
+  console.log(`URL serving from service worker: ${request.url}`);
   event.respondWith(router.fetch(request));
 });
 
