@@ -22,43 +22,74 @@ let routes = route({
 export type {};
 declare const self: ServiceWorkerGlobalScope;
 
-// And some handlers returning Remix Components
-let handlers: RouteHandlers<typeof routes> = {
-  index: ({ request }) => renderHtml(request.url, Home),
-  about: ({ request }) => renderHtml(request.url, About),
-  notFound: ({ request }) => renderHtml(request.url, NotFound),
-};
-
-// Define per-route layouts
-let layouts: Record<
-  keyof typeof routes,
-  Remix.Component<Remix.NoContext, { children: Remix.RemixElement | null }>
-> = {
-  index: Layout,
-  about: Layout,
-  notFound: Layout404,
-};
-
-// Log navigations to the console
-const logger: Middleware = async ({ request }, next) => {
-  console.log("➡️ Navigate:", request.url);
-  await next();
-  console.log("✅ Navigate:", request.url);
-};
-
-// Create a router and add our middleware
-let router = createRouter();
-router.use(logger);
-router.map(routes, handlers);
+let router = getRouter();
 
 self.addEventListener("fetch", async (event) => {
   let { request } = event;
   if (request.url.split("/").slice(-1)[0].includes(".")) {
+    // Let asset requests fall through
     return;
   }
   console.log(`URL serving from service worker: ${request.url}`);
   event.respondWith(router.fetch(request));
 });
+
+function getRouter() {
+  // And some handlers returning Remix Components
+  let handlers: RouteHandlers<typeof routes> = {
+    index: ({ request }) => renderHtml(request.url, Home),
+    about: ({ request }) => renderHtml(request.url, About),
+    notFound: ({ request }) => renderHtml(request.url, NotFound),
+  };
+
+  // Define per-route layouts
+  let layouts: Record<
+    keyof typeof routes,
+    Remix.Component<Remix.NoContext, { children: Remix.RemixElement | null }>
+  > = {
+    index: Layout,
+    about: Layout,
+    notFound: Layout404,
+  };
+
+  // Log navigations to the console
+  const logger: Middleware = async ({ request }, next) => {
+    console.log("➡️ Navigate:", request.url);
+    await next();
+    console.log("✅ Navigate:", request.url);
+  };
+
+  // Create a router and add our middleware
+  let router = createRouter();
+  router.use(logger);
+  router.map(routes, handlers);
+  return router;
+
+  async function renderHtml(url: string, Component: Remix.Component) {
+    let LayoutComponent = getLayout(new URL(url));
+    return html(
+      await renderToString(
+        <Document>
+          <LayoutComponent>
+            <Component />
+          </LayoutComponent>
+        </Document>
+      )
+    );
+  }
+
+  function getLayout(
+    url: URL
+  ): Remix.Component<Remix.NoContext, { children: Remix.RemixElement | null }> {
+    for (let key of Object.keys(routes) as (keyof typeof routes)[]) {
+      let path = routes[key];
+      if (path.pattern.test(url.toString())) {
+        return layouts[key];
+      }
+    }
+    return Layout404;
+  }
+}
 
 // Default UI layout for routes
 function Layout(
@@ -123,38 +154,11 @@ function NotFound() {
   );
 }
 
-async function renderHtml(url: string, Component: Remix.Component) {
-  await new Promise((r) => setTimeout(r, 1000));
-  let LayoutComponent = getLayout(new URL(url));
-  return html(
-    await renderToString(
-      <Document>
-        <LayoutComponent>
-          <Component />
-        </LayoutComponent>
-      </Document>
-    )
-  );
-}
-
-function getLayout(
-  url: URL
-): Remix.Component<Remix.NoContext, { children: Remix.RemixElement | null }> {
-  for (let key of Object.keys(routes) as (keyof typeof routes)[]) {
-    let path = routes[key];
-    if (path.pattern.test(url.toString())) {
-      return layouts[key];
-    }
-  }
-  return Layout404;
-}
-
 function Document({ children }: { children: Remix.RemixElement | null }) {
   return (
     <html lang="en">
       <head>
         <meta charSet="UTF-8" />
-        <link rel="icon" type="image/svg+xml" href="/vite.svg" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>temp</title>
       </head>
